@@ -15,15 +15,53 @@ import (
 	googlepb "github.com/golang/protobuf/ptypes/timestamp"
 	metricpb "google.golang.org/genproto/googleapis/api/metric"
 	monitoringpb "google.golang.org/genproto/googleapis/monitoring/v3"
+
+	// import otel sdk libraries for instrumentation.
+	"go.opentelemetry.io/otel/exporters/stdout/stdoutmetric"
+	"go.opentelemetry.io/otel/metric"
+	otelmetric "go.opentelemetry.io/otel/metric"
+	otelglobal "go.opentelemetry.io/otel/metric/global"
+	controller "go.opentelemetry.io/otel/sdk/metric/controller/basic"
+	processor "go.opentelemetry.io/otel/sdk/metric/processor/basic"
+	"go.opentelemetry.io/otel/sdk/metric/selector/simple"
 )
 
 // Note: be sure to configure this as a Runtime Variable in GCF.
 var projectId string = os.Getenv("GOOGLE_PROJECT_ID")
 var client *monitoring.MetricClient
+var meter otelmetric.Meter
+var metricController *controller.Controller
 
 func init() {
 	var err error
 	ctx := context.Background()
+
+	// text exporter, reports metrics on stdout.
+	textporter, _ := stdoutmetric.New(
+		stdoutmetric.WithPrettyPrint(),
+		stdoutmetric.WithWriter(log.Writer()),
+	)
+
+	// The controller handles periodic collection and exporting of metrics.
+	metricController = controller.New(
+		processor.NewFactory(
+			simple.NewWithInexpensiveDistribution(),
+			textporter,
+		),
+		controller.WithExporter(textporter),
+	)
+	err = metricController.Start(ctx)
+	if err != nil {
+		log.Fatalf("Failed to start metric controller: %s", err)
+	}
+	// Set our controller as the global MeterProvider, so instrumented libraries
+	// will report through this controller.
+	otelglobal.SetMeterProvider(metricController)
+
+	// Make a new meter, which instruments our beancounter library.
+	meter = otelglobal.Meter("beancounter", metric.WithInstrumentationVersion("v0.1.0"))
+
+	// Use google's Monitoring API directly.
 	client, err = monitoring.NewMetricClient(ctx)
 	if err != nil {
 		log.Fatalf("Failed to create Metrics Client: %v\n", err)
@@ -94,6 +132,14 @@ func metricPush(ctx context.Context, w http.ResponseWriter, metric string, label
 
 // ChangeEvent pushes a timeseries point with a "change" event, happening at the current time.
 func ChangeEvent(w http.ResponseWriter, r *http.Request) {
+	counter, err := meter.NewInt64Counter("changes")
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(fmt.Sprintf("Failed to create metric: %v", err)))
+		log.Fatalf("Failed to create metric: %v", err)
+	}
+	counter.Add(r.Context(), 1)
+
 	metricPush(r.Context(), w, "/beancounter/changes", nil, newIntPoint(1, 0))
 }
 
