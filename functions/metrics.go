@@ -17,6 +17,7 @@ import (
 	monitoringpb "google.golang.org/genproto/googleapis/monitoring/v3"
 
 	// import otel sdk libraries for instrumentation.
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/stdout/stdoutmetric"
 	"go.opentelemetry.io/otel/metric"
 	otelmetric "go.opentelemetry.io/otel/metric"
@@ -24,6 +25,7 @@ import (
 	controller "go.opentelemetry.io/otel/sdk/metric/controller/basic"
 	processor "go.opentelemetry.io/otel/sdk/metric/processor/basic"
 	"go.opentelemetry.io/otel/sdk/metric/selector/simple"
+	"go.opentelemetry.io/otel/sdk/resource"
 )
 
 // Note: be sure to configure this as a Runtime Variable in GCF.
@@ -49,6 +51,7 @@ func init() {
 			textporter,
 		),
 		controller.WithExporter(textporter),
+		controller.WithResource(resource.Empty()),
 	)
 	err = metricController.Start(ctx)
 	if err != nil {
@@ -145,6 +148,13 @@ func ChangeEvent(w http.ResponseWriter, r *http.Request) {
 
 // FeedEvent records a metric point for feeding.
 func FeedEvent(w http.ResponseWriter, r *http.Request) {
+	counter, err := meter.NewInt64Counter("feedings")
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(fmt.Sprintf("Failed to create metric: %v", err)))
+		log.Fatalf("Failed to create metric: %v", err)
+	}
+	counter.Add(r.Context(), 1)
 	metricPush(r.Context(), w, "/beancounter/feedings", nil, newIntPoint(1, 0))
 }
 
@@ -156,6 +166,18 @@ func MoodEvent(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("could not read status from query string."))
 		return
 	}
+
+	counter, err := meter.NewInt64Counter("status")
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(fmt.Sprintf("Failed to create metric: %v", err)))
+		log.Fatalf("Failed to create metric: %v", err)
+	}
+	counter.Add(r.Context(), 1, attribute.KeyValue{
+		Key:   "status",
+		Value: attribute.StringValue(s),
+	})
+
 	labels := map[string]string{"status": s}
 	metricPush(r.Context(), w, "/beancounter/status-label", labels, newIntPoint(1, 0))
 }
