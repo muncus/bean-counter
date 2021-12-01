@@ -15,8 +15,8 @@ exporters:
       enabled: false
     metric:
       prefix: "custom.googleapis.com/beancounter/"
-      # Terraform has already created descriptors.
-      # skip_create_descriptor: true
+      # Uncomment this if Terraform has already created descriptors.
+      skip_create_descriptor: true
 
 processors:
   batch:
