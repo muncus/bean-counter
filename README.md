@@ -40,6 +40,7 @@ is not currently a high priority.
   - ILB?
 - [ ] decide on whether or not we need the terraform for metric descriptors, now
 that otel-collector-contrib can do it for us.
+- [ ] add memory limiter to the otel collector.
 
 
 ## Unplanned, future investigations
@@ -48,3 +49,4 @@ that otel-collector-contrib can do it for us.
 - [ ] otel collector docs for [confighttp](https://github.com/open-telemetry/opentelemetry-collector/tree/main/config/confighttp) contain an incorrect snippet.
 - What does the prometheus -> otel conversion look like for a more persistent service?
   - and what about cloud run or gcf? they wont have prom metrics, except maybe push metrics?
+- add tracing support in gcf functions, and configure tail sampling with the collector.
