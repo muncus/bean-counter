@@ -29,15 +29,22 @@ support](https://github.com/open-telemetry/opentelemetry-go/issues/522), but it
 is not currently a high priority.
 
 ### Pending work:
-- [ ] Convert existing metrics to use the otel SDK (prom format first)
-  - [ ] (later) export over OTLP to collector.
-- [ ] Create a OTLP collector instance that can be run in Cloud Run.
-  - This collector should use the `otel/otel-collector-contrib` base, which has
-    a
-    [`googlecloudexporter`](https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/exporter/googlecloudexporter)
-    to get our metrics into cloud monitoring.
+- [X] Convert existing metrics to use the otel SDK
+  - First step is to use `exporter/stdout`
+  - [X] (later) export over OTLP to collector.
+- [X] Create a OTLP collector instance that can be run in Cloud Run.
+  - This collector is `otel/opentelemetry-collector-contrib` with a config found
+  in the `otel-collector` directory. 
+- [X] make Functions return sensible error codes, with text body.
+- [ ] find a way to stop depending on the Cloud Run hostname for exporting.
+  - ILB?
+- [ ] decide on whether or not we need the terraform for metric descriptors, now
+that otel-collector-contrib can do it for us.
 
 
 ## Unplanned, future investigations
 - Push metric support in otel-collector-contrib?
   - or, find alternate way to enable custom metric exports from GCF/CR
+- [ ] otel collector docs for [confighttp](https://github.com/open-telemetry/opentelemetry-collector/tree/main/config/confighttp) contain an incorrect snippet.
+- What does the prometheus -> otel conversion look like for a more persistent service?
+  - and what about cloud run or gcf? they wont have prom metrics, except maybe push metrics?
