@@ -1,0 +1,35 @@
+# OTel Collector config to listen for http on :8080
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: :8080
+
+exporters:
+  logging:
+  googlecloud:
+    # Cloud monitoring reports failure if *any* data points failed to record,
+    # but still records others in that batch.
+    # Retrying already-recorded points will fail, so we disable retries.
+    retry_on_failure:
+      enabled: false
+    metric:
+      prefix: "custom.googleapis.com/beancounter/"
+      # Uncomment this if Terraform has already created descriptors.
+      skip_create_descriptor: true
+
+processors:
+  batch:
+    send_batch_max_size: 200
+    send_batch_size: 200
+
+extensions:
+  health_check:
+
+service:
+  extensions: []
+  pipelines:
+    metrics:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [logging, googlecloud]
