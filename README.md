@@ -9,10 +9,9 @@ solutions.
 
 ☺ -> ☁️ (GCF) -> 🔭 (otel collector) -> :bar_chart: (cloud monitoring)
 
-Cloud Functions create OpenTelemetry metrics, and push them to an OTel collector backend.
-The Collector backend is a GCP loadbalancer, backed by a Cloud Run service,
-running a version of the
-[otel-collector-contrib](github.com/opentelemetry/opentelemetry-collector-contrib)
+Cloud Functions create OpenTelemetry metrics, and push them to an OTel collector
+backend.  The Collector backend is a Cloud Run service, running a version of the
+[otel-collector-contrib](http://github.com/open-telemetry/opentelemetry-collector-contrib)
 container with the config found in `otel-collector/collector-config.yaml`. This
 config sends all received metrics to the Google Cloud Monitoring service.
 
@@ -32,13 +31,17 @@ components (e.g. Monitoring Services and Metric Descriptors).
 
 OpenTelemetry ("otel") recently announced the Metrics API spec has become
 Stable. With this step forward, it is now possible to instrument libraries with
-a common SDK, and allow the binary to determine how to export those metrics
-(over either otel's own protocol (OTLP), or as Prometheus metrics, for example).
+a common SDK, and allow the binary to determine how to export those metrics.
 
-I investigated the use of `otel-collector` to convert exported prometheus
-metrics into Cloud Monitoring data, but for serverless platforms like GCF, and
-Run, this is not a feasible solution, because the collector does not accept push
-metrics at this time. (there is an [issue for pushgateway
+The first stage used the
+[stdoutmetric](https://pkg.go.dev/go.opentelemetry.io/otel/exporters/stdout/stdoutmetric)
+exporter, which simply prints the metrics to stdout. The next step was to push
+the metrics to a collector, over otel's wire protocol, OTLP.
+
+I investigated the use of `otel-collector` to receive prometheus metrics, but
+for serverless platforms like GCF, and Run, this is not a feasible solution,
+because the collector does not accept push metrics at this time. (there is an
+[issue for pushgateway
 support](https://github.com/open-telemetry/opentelemetry-go/issues/522), but it
 is not currently a high priority.
 
@@ -50,17 +53,15 @@ is not currently a high priority.
   - This collector is `otel/opentelemetry-collector-contrib` with a config found
   in the `otel-collector` directory. 
 - [X] make Functions return sensible error codes, with text body.
-- [ ] find a way to stop depending on the Cloud Run hostname for exporting.
-  - ILB?
 - [ ] decide on whether or not we need the terraform for metric descriptors, now
 that otel-collector-contrib can do it for us.
 - [ ] add memory limiter to the otel collector.
 
 
 ## Unplanned, future investigations
-- Push metric support in otel-collector-contrib?
-  - or, find alternate way to enable custom metric exports from GCF/CR
-- [ ] otel collector docs for [confighttp](https://github.com/open-telemetry/opentelemetry-collector/tree/main/config/confighttp) contain an incorrect snippet.
+- Prometheus Push metric support in otel-collector-contrib?
 - What does the prometheus -> otel conversion look like for a more persistent service?
-  - and what about cloud run or gcf? they wont have prom metrics, except maybe push metrics?
 - add tracing support in gcf functions, and configure tail sampling with the collector.
+- [-] find a way to stop depending on the Cloud Run hostname for exporting.
+  - Auth through an LB still requires the token audience match the cloud run
+  hostname, so this seems infeasible for now.
