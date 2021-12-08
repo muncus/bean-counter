@@ -19,6 +19,7 @@ import (
 	processor "go.opentelemetry.io/otel/sdk/metric/processor/basic"
 	"go.opentelemetry.io/otel/sdk/metric/selector/simple"
 	"go.opentelemetry.io/otel/sdk/resource"
+	"google.golang.org/api/idtoken"
 )
 
 var meter otelmetric.Meter
@@ -34,10 +35,29 @@ func init() {
 		stdoutmetric.WithWriter(log.Writer()),
 	)
 	// otlp exporter.
+	// Create an auth token source, authenticating as the Service Account that this function runs as.
+	// audience claim must match the url of the Cloud Run service we're calling.
+	audienceClaim := "https://otel-collector-ridqe6ysba-uw.a.run.app/"
+	tokensrc, err := idtoken.NewTokenSource(ctx, audienceClaim)
+	if err != nil {
+		log.Fatalf("failed create auth token source: %s", err)
+	}
+	t, err := tokensrc.Token()
+	if err != nil {
+		log.Fatalf("failed get auth token: %s", err)
+	}
+	// These lines can help debug by printing the extracted token details
+	// p, err := idtoken.Validate(ctx, t.AccessToken, audienceClaim)
+	// log.Printf("payload of token: %#v or error: %s", p, err)
+
 	exporter, err := otlpmetrichttp.New(
 		ctx, otlpmetrichttp.WithMaxAttempts(1),
 		otlpmetrichttp.WithTimeout(30*time.Second),
 		otlpmetrichttp.WithInsecure(),
+		otlpmetrichttp.WithHeaders(
+			map[string]string{
+				"Authorization": fmt.Sprintf("Bearer %s", t.AccessToken),
+			}),
 		// TODO: this is a loadbalancer, called 'otel-lb'
 		otlpmetrichttp.WithEndpoint("35.212.144.179"),
 	)
