@@ -5,6 +5,20 @@ Cloud Run with Cloud Monitoring. Particularly, how does one get metrics out of
 CF/CR and into Cloud Monitoring tools, using a minimum amount of vendor-specific
 solutions.
 
+## Current architecture:
+
+☺ -> ☁️ (GCF) -> 🔭 (otel collector) -> :bar_chart: (cloud monitoring)
+
+Cloud Functions create OpenTelemetry metrics, and push them to an OTel collector backend.
+The Collector backend is a GCP loadbalancer, backed by a Cloud Run service,
+running a version of the
+[otel-collector-contrib](github.com/opentelemetry/opentelemetry-collector-contrib)
+container with the config found in `otel-collector/collector-config.yaml`. This
+config sends all received metrics to the Google Cloud Monitoring service.
+
+These metrics are then displayed with a dashboard, created and managed by 
+terraform configs.
+
 ## Stage 1: Custom work
 
 To get a functional base, I started with calling the vendor-specific apis
