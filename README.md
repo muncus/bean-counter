@@ -65,3 +65,4 @@ that otel-collector-contrib can do it for us.
 - [-] find a way to stop depending on the Cloud Run hostname for exporting.
   - Auth through an LB still requires the token audience match the cloud run
   hostname, so this seems infeasible for now.
+

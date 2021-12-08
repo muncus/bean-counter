@@ -45,6 +45,14 @@ func init() {
 	t, err := tokensrc.Token()
 	if err != nil {
 		log.Fatalf("failed get auth token: %s", err)
+	exporter, err := otlpmetrichttp.New(
+		ctx, otlpmetrichttp.WithMaxAttempts(1),
+		otlpmetrichttp.WithTimeout(30*time.Second),
+		// TODO: this is a cloud run hostname, which changes with each deploy :(
+		otlpmetrichttp.WithEndpoint("otel-collector-ridqe6ysba-uw.a.run.app"),
+	)
+	if err != nil {
+		log.Fatalf("Failed to create otlp exporter: %s", err)
 	}
 	// These lines can help debug by printing the extracted token details
 	// p, err := idtoken.Validate(ctx, t.AccessToken, audienceClaim)
