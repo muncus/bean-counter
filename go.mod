@@ -1,4 +1,4 @@
-module github.com/muncus/bean-counter/functions
+module github.com/muncus/bean-counter
 
 go 1.17
 
