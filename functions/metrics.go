@@ -74,6 +74,7 @@ func init() {
 		// TODO: consider a multi-exporter, which will call interface methods on both.
 		// controller.WithExporter(textporter),
 		controller.WithExporter(exporter),
+		controller.WithPushTimeout(30*time.Second),
 		controller.WithResource(resource.Empty()),
 	)
 	// Delay starting the controller until a request comes in.
@@ -101,11 +102,19 @@ func otelPush(ctx context.Context, w http.ResponseWriter, metric string, value i
 		log.Fatalf("Failed to create metric: %v", err)
 	}
 	counter.Add(ctx, 1)
+	if err := metricController.Start(ctx); err != nil && err != controller.ErrControllerStarted {
+		log.Printf("Failed starting controller: %s", err)
+	}
 
 	if err = metricController.Collect(ctx); err != nil && err != controller.ErrControllerStarted {
 		w.WriteHeader(http.StatusExpectationFailed)
 		w.Write([]byte(fmt.Sprintf("Failed to run metric collection: %s", err)))
 		return err
+	}
+	// explicitly call Stop(), because we want to wait for collection and
+	// exporting to finish before the function exits.
+	if err := metricController.Stop(ctx); err != nil {
+		log.Printf("Failed stopping controller: %s", err)
 	}
 	w.WriteHeader(http.StatusCreated)
 	w.Write([]byte(fmt.Sprintf("Data point recorded for metric: '%s'.", metric)))
