@@ -37,7 +37,7 @@ func init() {
 	// otlp exporter.
 	// Create an auth token source, authenticating as the Service Account that this function runs as.
 	// audience claim must match the url of the Cloud Run service we're calling.
-	audienceClaim := "https://otel-collector-ridqe6ysba-uw.a.run.app/"
+	audienceClaim := "https://otel-collector-ridqe6ysba-uw.a.run.app/v1/metrics"
 	tokensrc, err := idtoken.NewTokenSource(ctx, audienceClaim)
 	if err != nil {
 		log.Fatalf("failed create auth token source: %s", err)
@@ -51,9 +51,8 @@ func init() {
 	// log.Printf("payload of token: %#v or error: %s", p, err)
 
 	exporter, err := otlpmetrichttp.New(
-		ctx, otlpmetrichttp.WithMaxAttempts(1),
-		otlpmetrichttp.WithTimeout(30*time.Second),
-		otlpmetrichttp.WithInsecure(),
+		ctx, otlpmetrichttp.WithMaxAttempts(2),
+		otlpmetrichttp.WithTimeout(60*time.Second),
 		otlpmetrichttp.WithHeaders(
 			map[string]string{
 				"Authorization": fmt.Sprintf("Bearer %s", t.AccessToken),
@@ -75,12 +74,17 @@ func init() {
 		// TODO: consider a multi-exporter, which will call interface methods on both.
 		// controller.WithExporter(textporter),
 		controller.WithExporter(exporter),
+		controller.WithPushTimeout(30*time.Second),
 		controller.WithResource(resource.Empty()),
 	)
-	err = metricController.Start(ctx)
-	if err != nil {
-		log.Fatalf("Failed to start metric controller: %s", err)
-	}
+	// Delay starting the controller until a request comes in.
+	// Starting it now seems to cause some 'context deadline exceeded' errors
+	// when collection is called.
+	// err = metricController.Start(ctx)
+	// if err != nil {
+	// 	log.Fatalf("Failed to start metric controller: %s", err)
+	// }
+
 	// Set our controller as the global MeterProvider, so instrumented libraries
 	// will report through this controller.
 	otelglobal.SetMeterProvider(metricController)
@@ -90,7 +94,7 @@ func init() {
 }
 
 // otelPush creates an otel counter with the given metric name, and records the value.
-func otelPush(ctx context.Context, w http.ResponseWriter, metric string, value int64) {
+func otelPush(ctx context.Context, w http.ResponseWriter, metric string, value int64) error {
 	counter, err := meter.NewInt64UpDownCounter(metric)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -98,9 +102,23 @@ func otelPush(ctx context.Context, w http.ResponseWriter, metric string, value i
 		log.Fatalf("Failed to create metric: %v", err)
 	}
 	counter.Add(ctx, 1)
+	if err := metricController.Start(ctx); err != nil && err != controller.ErrControllerStarted {
+		log.Printf("Failed starting controller: %s", err)
+	}
 
+	if err = metricController.Collect(ctx); err != nil && err != controller.ErrControllerStarted {
+		w.WriteHeader(http.StatusExpectationFailed)
+		w.Write([]byte(fmt.Sprintf("Failed to run metric collection: %s", err)))
+		return err
+	}
+	// explicitly call Stop(), because we want to wait for collection and
+	// exporting to finish before the function exits.
+	if err := metricController.Stop(ctx); err != nil {
+		log.Printf("Failed stopping controller: %s", err)
+	}
 	w.WriteHeader(http.StatusCreated)
 	w.Write([]byte(fmt.Sprintf("Data point recorded for metric: '%s'.", metric)))
+	return nil
 }
 
 // ChangeEvent pushes a timeseries point with a "change" event, happening at the current time.
@@ -132,6 +150,12 @@ func MoodEvent(w http.ResponseWriter, r *http.Request) {
 		Key:   "status",
 		Value: attribute.StringValue(s),
 	})
+
+	if err = metricController.Collect(r.Context()); err != nil && err != controller.ErrControllerStarted {
+		w.WriteHeader(http.StatusExpectationFailed)
+		w.Write([]byte(fmt.Sprintf("Failed to run metric collection: %s", err)))
+		return
+	}
 	w.WriteHeader(http.StatusCreated)
 	w.Write([]byte(fmt.Sprintf("Data point recorded for metric: '%s'.", "status")))
 }
